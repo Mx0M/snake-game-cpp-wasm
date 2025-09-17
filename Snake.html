@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Snake Game (C++ + WebAssembly)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        canvas {
+            border: 2px solid #333;
+            background: #f0f0f0;
+        }
+
+        #score {
+            font-size: 20px;
+            margin-top: 10px;
+        }
+
+        #status {
+            color: red;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        #speedControl {
+            margin-top: 15px;
+        }
+    </style>
+    <script src="snake.js"></script>
+</head>
+
+<body>
+
+    <h1>🐍 Snake Game (C++ + WebAssembly)</h1>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div id="score">Score: 0</div>
+    <div id="status"></div>
+
+    <div id="speedControl">
+        <label for="speedSelect">Select Speed: </label>
+        <select id="speedSelect">
+            <option value="50">Prime (50 ms)</option>
+            <option value="100">Fast (100 ms)</option>
+            <option value="150" selected>Standard (150 ms)</option>
+            <option value="200">Slow (200 ms)</option>
+        </select>
+    </div>
+
+    <p>Use arrow keys to move. Press "R" to restart.</p>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const GRID_SIZE = 20;
+        const CELL_SIZE = canvas.width / GRID_SIZE;
+
+        let moduleInstance;
+        let gameInterval = null;
+        let gameSpeed = 150; // default speed in ms
+
+        function drawCell(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE - 1, CELL_SIZE - 1);
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const length = moduleInstance.ccall('get_snake_length', 'number', [], []);
+            for (let i = 0; i < length; i++) {
+                const x = moduleInstance.ccall('get_snake_segment', 'number', ['number', 'number'], [i, 0]);
+                const y = moduleInstance.ccall('get_snake_segment', 'number', ['number', 'number'], [i, 1]);
+                drawCell(x, y, i === 0 ? '#006400' : '#32CD32');
+            }
+
+            const fx = moduleInstance.ccall('get_food', 'number', ['number'], [0]);
+            const fy = moduleInstance.ccall('get_food', 'number', ['number'], [1]);
+            drawCell(fx, fy, 'red');
+
+            const score = moduleInstance.ccall('get_score', 'number', [], []);
+            document.getElementById('score').textContent = "Score: " + score;
+        }
+
+        function gameLoop() {
+            if (moduleInstance.ccall('is_game_over', 'boolean', [], [])) {
+                clearInterval(gameInterval);
+                document.getElementById('status').textContent = "💀 Game Over! Press R to restart.";
+                return;
+            }
+
+            moduleInstance.ccall('update', null, [], []);
+            render();
+        }
+
+        function startGameLoop() {
+            if (gameInterval) clearInterval(gameInterval);
+            gameInterval = setInterval(gameLoop, gameSpeed);
+        }
+
+        function handleKey(e) {
+            switch (e.key) {
+                case 'ArrowUp':
+                    moduleInstance.ccall('change_direction', null, ['number', 'number'], [0, -1]);
+                    break;
+                case 'ArrowDown':
+                    moduleInstance.ccall('change_direction', null, ['number', 'number'], [0, 1]);
+                    break;
+                case 'ArrowLeft':
+                    moduleInstance.ccall('change_direction', null, ['number', 'number'], [-1, 0]);
+                    break;
+                case 'ArrowRight':
+                    moduleInstance.ccall('change_direction', null, ['number', 'number'], [1, 0]);
+                    break;
+                case 'r':
+                case 'R':
+                    moduleInstance.ccall('start_game', null, [], []);
+                    document.getElementById('status').textContent = "";
+                    render();
+                    startGameLoop();
+                    break;
+            }
+        }
+
+        document.getElementById('speedSelect').addEventListener('change', e => {
+            gameSpeed = parseInt(e.target.value);
+            if (moduleInstance) {
+                startGameLoop();
+            }
+        });
+
+        createModule().then(Module => {
+            moduleInstance = Module;
+            moduleInstance.ccall('start_game', null, [], []);
+            render();
+            startGameLoop();
+        });
+
+        document.addEventListener('keydown', handleKey);
+    </script>
+
+</body>
+
+</html>
